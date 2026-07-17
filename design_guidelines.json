@@ -1,0 +1,177 @@
+{
+  "app_name": "LGDP - Les Gars du Podcast",
+  "personality": "7 Dark-First Utility DARK with 6 Glass / Luxe surfaces",
+  "personality_one_liner": "An aggressive, performance-focused interface built around deep obsidian, intense red accents, and large-format cinematic imagery that captures the raw energy of pro wrestling and underground podcasting.",
+  "color": {
+    "surface": "#0D0E12",
+    "onSurface": "#FFFFFF",
+    "surfaceSecondary": "#1C1D22",
+    "onSurfaceSecondary": "#B4B5B9",
+    "surfaceTertiary": "#26282E",
+    "onSurfaceTertiary": "#D1D3D8",
+    "surfaceInverse": "#E5E7EB",
+    "onSurfaceInverse": "#0D0E12",
+    "brand": "#E52321",
+    "brandPrimary": "#E52321",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#D4AF37",
+    "onBrandSecondary": "#000000",
+    "brandTertiary": "#3E1515",
+    "onBrandTertiary": "#FCA5A5",
+    "success": "#10B981",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#000000",
+    "error": "#EF4444",
+    "onError": "#FFFFFF",
+    "info": "#3B82F6",
+    "onInfo": "#FFFFFF",
+    "border": "#26282E",
+    "borderStrong": "#3E414A",
+    "divider": "#1F2127"
+  },
+  "typography": {
+    "displayFontFamily": "Barlow Condensed",
+    "textFontFamily": "Manrope",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Dense horizontal spacing for stat tables, generous vertical breathing room around hero imagery and player controls. Use 16px padding on screen roots.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 4,
+    "md": 8,
+    "lg": 12,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use heavy glass on the bottom tab bar and sticky headers to allow raw imagery to bleed underneath.",
+      "Use glass overlay on 'Featured Event' cards over dark stadium photography.",
+      "Add glassmorphism behind the Podcast Player controls when hovering over studio artwork."
+    ],
+    "dont's": [
+      "Never blur dense stats tables or wrestler rosters.",
+      "Do not use glass for text-heavy news reading views."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Accueil (Home)",
+      "purpose": "Immerse the fan immediately in the LGDP universe with big visuals, latest news, and a quick-play podcast snippet.",
+      "states": {
+        "loading": "Centered brand red spinner over deep obsidian.",
+        "empty": "No content yet. 'L\\'arène est vide. Revenez plus tard.'",
+        "error": "Error loading feed. 'Erreur de connexion à l\\'univers LGDP.'"
+      },
+      "layout": "Root scroll view. Top 40% is a cinematic Hero Banner (auto-playing or static dark stadium image) with a vertical gradient scrim (transparent to surfaceInverse). Below: Horizontal scroll of 'Événements à venir' (Upcoming Events) cards. Then: 'Dernier Podcast' (Latest Podcast) module with an inline play button and audio wave graphic. Finally: Vertical list of News cards."
+    },
+    {
+      "name": "Lutte (Wrestling)",
+      "purpose": "A testosterone-fueled directory of wrestlers, ongoing rivalries, championships, and match results.",
+      "states": {
+        "loading": "Skeleton grids for the roster.",
+        "empty": "No wrestlers available.",
+        "error": "Failed to load the roster."
+      },
+      "layout": "Sticky top segmented control (Roster | Matchs | Championnats). Roster: 2-column grid. Each card is a tall portrait image of an aggressive wrestler with a bottom-heavy gradient scrim, name in Barlow Condensed overlaid. Matchs: List view with high-contrast dates and VS layout. Championnats: Horizontal slider featuring championship belt images highlighting Gold accent."
+    },
+    {
+      "name": "Podcast",
+      "purpose": "An immersive audio experience tailored for dark-mode, foreground and background listening.",
+      "states": {
+        "loading": "Pulsing audio wave skeleton.",
+        "empty": "No episodes found.",
+        "error": "Failed to load episodes."
+      },
+      "layout": "Spotify-inspired layout. Top: Square podcast cover art (neon studio vibes) taking up 50% of the screen. Middle: Title, metadata, and huge pill-shaped Play/Pause button in brandPrimary red. Bottom: Progress bar, Favorites (heart), Share, and Up Next horizontal queue. Uses background playback via expo-av/track-player."
+    },
+    {
+      "name": "Billets (Tickets)",
+      "purpose": "Drive conversions for LGDP LIVE events through a streamlined, urgent purchase flow.",
+      "states": {
+        "loading": "Spinner centered on screen.",
+        "empty": "No upcoming events. 'Aucun événement à venir.'",
+        "error": "Failed to load ticketing information."
+      },
+      "layout": "Vertical list of thick, high-contrast cards. Each card displays Date (large bold typography), Venue, and a 'Acheter' (Buy) primary CTA pinned to the right. Square integration module slides up in a Bottom Sheet upon tapping 'Acheter'."
+    },
+    {
+      "name": "Boutique (Store)",
+      "purpose": "Sell merchandise (shirts, caps, posters) with a premium streetwear / athletic aesthetic.",
+      "states": {
+        "loading": "Skeleton product grid.",
+        "empty": "Store is currently closed.",
+        "error": "Failed to load merchandise."
+      },
+      "layout": "2-column grid. Product images isolated on 'surfaceTertiary' or metallic carbon backgrounds. Price and Name aligned below the image. Tapping a product opens a full-screen modal with image carousel, size selector (segmented control), and a sticky 'Ajouter au panier' (Add to Cart) CTA at the bottom thumb zone."
+    },
+    {
+      "name": "Profil",
+      "purpose": "Manage fan identity, saved podcasts, and purchased tickets.",
+      "states": {
+        "loading": "Spinner.",
+        "empty": "Not logged in state with prompt to Auth.",
+        "error": "Failed to load profile."
+      },
+      "layout": "Header with User Avatar and Stats (e.g., 'Fan depuis 2024'). List sections for 'Mes Billets' (My Tickets) and 'Podcasts Favoris' (Favorite Podcasts). Auth uses JWT + Google."
+    }
+  ],
+  "images": {
+    "podcast_studio_hero": {
+      "url": "https://images.unsplash.com/photo-1668537338628-85b9970bf17f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDV8MHwxfHNlYXJjaHwxfHxwb2RjYXN0JTIwc3R1ZGlvJTIwZGFyayUyMG5lb24lMjBtaWNyb3Bob25lfGVufDB8fHx8MTc4NDMyNDM4MXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Dark neon podcast studio with microphone"
+    },
+    "wrestling_stadium_banner": {
+      "url": "https://images.unsplash.com/photo-1716561388086-cbc1e07f9f65?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNzl8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjB3cmVzdGxpbmclMjByaW5nJTIwZGFyayUyMHN0YWRpdW18ZW58MHx8fHwxNzg0MzI0MzgxfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Dark stadium lights for professional wrestling arena"
+    },
+    "wrestler_roster_sample": {
+      "url": "https://images.unsplash.com/photo-1563844528129-067e06a638e5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHxhZ2dyZXNzaXZlJTIwd3Jlc3RsZXIlMjBwb3NlJTIwcmVkJTIwYmxhY2t8ZW58MHx8fHwxNzg0MzI0MzgxfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Aggressive wrestler posing in the ring"
+    },
+    "live_event_crowd": {
+      "url": "https://images.unsplash.com/photo-1515175192010-cf3250992719?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHwxfHxjb25jZXJ0JTIwY3Jvd2QlMjBkYXJrJTIwcmVkJTIwbGlnaHRzfGVufDB8fHx8MTc4NDMyNDM4MXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Concert crowd illuminated by dark red stadium lights"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Adhere STRICTLY to the Dark-First Utility DARK design personality with Glass / Luxe accents.",
+    "Do NOT use Inter or Roboto. You must use 'Barlow Condensed' for displays, headings, and aggressive numbers, and 'Manrope' for readable body text and metadata.",
+    "BANNED: Blue, purple, and indigo. Stick strictly to the defined deep obsidian and intense red/gold tokens.",
+    "IMPLEMENT A SCRIM (gradient overlay) on ALL text that sits over images. Use a 3-stop vertical gradient from transparent to surface (black) at >= 70% opacity at the bottom. This is non-negotiable for the Hero banner and Roster grid.",
+    "Use Phosphor icons. Stick to a single weight (e.g., bold or regular) across all screens. Use outlined for inactive tabs, filled for active tabs.",
+    "Ensure buttons are large and impactful (thumb-zone optimized). Primary CTAs should be pinned at the bottom on scrolling pages.",
+    "Include 'Square' payment processing module in the Tickets section and ensure a smooth bottom-sheet checkout flow.",
+    "Ensure 'Podcast' audio player supports background execution."
+  ]
+}

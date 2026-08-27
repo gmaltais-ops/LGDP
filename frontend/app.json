@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.lgdpapp.avxtm0"
+      "bundleIdentifier": "com.emergent.lgdpapp.avxtm0",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Choisir des images pour la boutique et le contenu LGDP"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +21,8 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.lgdpapp.avxtm0"
+      "package": "com.emergent.lgdpapp.avxtm0",
+      "permissions": ["READ_EXTERNAL_STORAGE", "READ_MEDIA_IMAGES"]
     },
     "web": {
       "bundler": "metro",
@@ -36,7 +40,13 @@
           "backgroundColor": "#000000"
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "L'application accède à vos photos pour téléverser des images vers LGDP"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

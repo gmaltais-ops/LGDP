@@ -66,6 +66,16 @@ export default function Profil() {
           {user.is_admin && (
             <View style={styles.adminBadge}><Text style={styles.adminBadgeText}>ADMIN LGDP</Text></View>
           )}
+          {user.is_admin && (
+            <Pressable
+              testID="profil-admin-btn"
+              style={styles.adminAccessBtn}
+              onPress={() => router.push("/admin" as any)}
+            >
+              <Ionicons name="key" size={16} color={colors.white} />
+              <Text style={styles.adminAccessText}>PANNEAU ADMIN</Text>
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.tabsBar}>
@@ -151,6 +161,12 @@ const styles = StyleSheet.create({
   userEmail: { ...typography.body, color: colors.onSurfaceSecondary, marginTop: 2 },
   adminBadge: { marginTop: spacing.sm, backgroundColor: colors.brandGold, paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.sm },
   adminBadgeText: { ...typography.label, color: colors.black, fontSize: 10 },
+  adminAccessBtn: {
+    flexDirection: "row", alignItems: "center", gap: spacing.sm,
+    backgroundColor: colors.brand, paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    borderRadius: radius.md, marginTop: spacing.md,
+  },
+  adminAccessText: { ...typography.label, color: colors.white, letterSpacing: 1, fontSize: 11 },
   tabsBar: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: spacing.md },
   tabBtn: { flex: 1, paddingVertical: spacing.md, borderRadius: radius.md, alignItems: "center", borderWidth: 1, borderColor: colors.border },
   tabBtnActive: { backgroundColor: colors.brand, borderColor: colors.brand },

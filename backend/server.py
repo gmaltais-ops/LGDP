@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Header, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Header, Request, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -9,10 +9,17 @@ import uuid
 import bcrypt
 import jwt
 import httpx
+import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
+
+# Supabase Storage (images only — DB is still MongoDB per current state)
+try:
+    from supabase import create_client as _sb_create_client
+except ImportError:
+    _sb_create_client = None
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -26,6 +33,34 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ.get('JWT_SECRET', 'lgdp-secret-change-me-in-prod-8c3a5f9b2d1e')
 JWT_ALGO = 'HS256'
 JWT_EXP_DAYS = 30
+
+# Supabase Storage client (backend-only, uses SECRET key — never exposed to frontend)
+_SUPABASE_URL = os.environ.get('SUPABASE_URL', '').rstrip('/')
+_SUPABASE_KEY = os.environ.get('SUPABASE_SECRET_KEY') or os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+_supabase = None
+if _SUPABASE_URL and _SUPABASE_KEY and _sb_create_client:
+    try:
+        _supabase = _sb_create_client(_SUPABASE_URL, _SUPABASE_KEY)
+    except Exception as _e:
+        logging.getLogger("lgdp").warning(f"Supabase Storage init failed: {_e}")
+
+STORAGE_BUCKETS = {"shows", "roster", "nouvelles", "podcasts", "marchandise", "accueil"}
+ALLOWED_MIME = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def storage_public_url(bucket: str, path: str) -> str:
+    """Build the public URL for an object in a public bucket."""
+    if not _SUPABASE_URL:
+        return ""
+    return f"{_SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}"
+
+
+def require_storage():
+    if _supabase is None:
+        raise HTTPException(503, "Supabase Storage non configuré (SUPABASE_URL / SUPABASE_SECRET_KEY manquants)")
+
 
 app = FastAPI(title="LGDP API")
 api_router = APIRouter(prefix="/api")
@@ -576,6 +611,273 @@ async def admin_stats(authorization: Optional[str] = Header(None)):
         "wrestlers": await db.wrestlers.count_documents({}),
         "events": await db.events.count_documents({}),
     }
+
+
+# ============================================================
+# Admin — Image Management (Supabase Storage + MongoDB URL sync)
+# ============================================================
+async def _require_admin(authorization: Optional[str]) -> Dict[str, Any]:
+    user = await require_user(authorization)
+    if not user.get("is_admin"):
+        raise HTTPException(403, "Admin requis")
+    return user
+
+
+# Map resource type → (collection, id_field, image_field, bucket)
+RESOURCE_MAP: Dict[str, Dict[str, str]] = {
+    "wrestler":   {"col": "wrestlers",     "id_field": "wrestler_id",     "img_field": "photo",        "bucket": "roster"},
+    "episode":    {"col": "episodes",      "id_field": "episode_id",      "img_field": "cover_image",  "bucket": "podcasts"},
+    "event":      {"col": "events",        "id_field": "event_id",        "img_field": "poster",       "bucket": "shows"},
+    "product":    {"col": "products",      "id_field": "product_id",      "img_field": "image",        "bucket": "marchandise"},
+    "news":       {"col": "news",          "id_field": "news_id",         "img_field": "image",        "bucket": "nouvelles"},
+    "home":       {"col": "home_sections", "id_field": "section_id",      "img_field": "image_url",    "bucket": "accueil"},
+}
+
+
+def _safe_ext(filename: str) -> str:
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext not in ALLOWED_EXT:
+        raise HTTPException(400, f"Extension non autorisée. Utilisez: {', '.join(ALLOWED_EXT)}")
+    return ext
+
+
+def _validate_bucket(bucket: str) -> str:
+    if bucket not in STORAGE_BUCKETS:
+        raise HTTPException(400, f"Bucket inconnu. Choix: {sorted(STORAGE_BUCKETS)}")
+    return bucket
+
+
+@api_router.get("/admin/storage/buckets")
+async def admin_list_buckets(authorization: Optional[str] = Header(None)):
+    await _require_admin(authorization)
+    require_storage()
+    def _q():
+        return _supabase.storage.list_buckets()
+    buckets = await asyncio.to_thread(_q)
+    return [{"name": b.name, "public": b.public} for b in buckets]
+
+
+@api_router.get("/admin/storage/{bucket}")
+async def admin_list_bucket_files(bucket: str, authorization: Optional[str] = Header(None)):
+    await _require_admin(authorization)
+    _validate_bucket(bucket)
+    require_storage()
+    def _q():
+        return _supabase.storage.from_(bucket).list("", {"limit": 200, "sortBy": {"column": "created_at", "order": "desc"}})
+    files = await asyncio.to_thread(_q)
+    out = []
+    for f in files or []:
+        name = f.get("name") if isinstance(f, dict) else getattr(f, "name", None)
+        if not name or name.startswith("."):
+            continue
+        out.append({"name": name, "url": storage_public_url(bucket, name)})
+    return out
+
+
+@api_router.post("/admin/upload")
+async def admin_upload_image(
+    bucket: str = Form(...),
+    file: UploadFile = File(...),
+    resource_type: Optional[str] = Form(None),
+    resource_id: Optional[str] = Form(None),
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Upload an image to Supabase Storage.
+    If resource_type + resource_id are provided, also update the matching MongoDB record's image field.
+    """
+    await _require_admin(authorization)
+    require_storage()
+    _validate_bucket(bucket)
+
+    # Validate content type + size
+    if file.content_type and file.content_type not in ALLOWED_MIME:
+        raise HTTPException(400, f"Type MIME non autorisé: {file.content_type}")
+    ext = _safe_ext(file.filename or "")
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "Fichier trop lourd (max 10 MB)")
+    if len(data) == 0:
+        raise HTTPException(400, "Fichier vide")
+
+    # Store as: {resource_type or 'misc'}/{timestamp}_{uuid}.{ext}
+    prefix = (resource_type or "misc").replace("/", "_")
+    fname = f"{prefix}/{int(datetime.now(timezone.utc).timestamp())}_{uuid.uuid4().hex[:8]}{ext}"
+
+    def _upload():
+        return _supabase.storage.from_(bucket).upload(
+            path=fname,
+            file=data,
+            file_options={"content-type": file.content_type or f"image/{ext.lstrip('.')}", "upsert": "false"},
+        )
+    try:
+        await asyncio.to_thread(_upload)
+    except Exception as e:
+        raise HTTPException(500, f"Upload échec: {str(e)[:200]}")
+
+    url = storage_public_url(bucket, fname)
+
+    # Optionally attach URL to a resource
+    if resource_type and resource_id:
+        cfg = RESOURCE_MAP.get(resource_type)
+        if not cfg:
+            raise HTTPException(400, f"resource_type inconnu: {resource_type}")
+        col = db[cfg["col"]]
+        res = await col.update_one({cfg["id_field"]: resource_id}, {"$set": {cfg["img_field"]: url}})
+        if res.matched_count == 0:
+            raise HTTPException(404, f"{resource_type} `{resource_id}` introuvable")
+
+    return {"ok": True, "url": url, "path": fname, "bucket": bucket}
+
+
+@api_router.delete("/admin/storage/{bucket}/{path:path}")
+async def admin_delete_image(
+    bucket: str, path: str,
+    authorization: Optional[str] = Header(None),
+):
+    await _require_admin(authorization)
+    _validate_bucket(bucket)
+    require_storage()
+
+    def _rm():
+        return _supabase.storage.from_(bucket).remove([path])
+    try:
+        await asyncio.to_thread(_rm)
+    except Exception as e:
+        raise HTTPException(500, f"Suppression échec: {str(e)[:200]}")
+
+    # Also clear any resource that referenced this URL
+    url = storage_public_url(bucket, path)
+    for _rtype, cfg in RESOURCE_MAP.items():
+        try:
+            await db[cfg["col"]].update_many({cfg["img_field"]: url}, {"$set": {cfg["img_field"]: None}})
+        except Exception:
+            pass
+    return {"ok": True}
+
+
+class SetImageBody(BaseModel):
+    resource_type: str
+    resource_id: str
+    url: Optional[str] = None  # None to clear
+
+
+@api_router.patch("/admin/resource-image")
+async def admin_set_resource_image(
+    body: SetImageBody,
+    authorization: Optional[str] = Header(None),
+):
+    """Attach an existing Storage URL (or clear) to a resource without re-uploading."""
+    await _require_admin(authorization)
+    cfg = RESOURCE_MAP.get(body.resource_type)
+    if not cfg:
+        raise HTTPException(400, f"resource_type inconnu: {body.resource_type}")
+    res = await db[cfg["col"]].update_one(
+        {cfg["id_field"]: body.resource_id},
+        {"$set": {cfg["img_field"]: body.url}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "Resource introuvable")
+    return {"ok": True, "url": body.url}
+
+
+@api_router.get("/admin/manageable")
+async def admin_manageable(authorization: Optional[str] = Header(None)):
+    """Return every editable resource with its current image URL (grouped for admin UI)."""
+    await _require_admin(authorization)
+
+    async def _list(col_name: str, id_field: str, img_field: str, label_field: str):
+        docs = await db[col_name].find({}, {"_id": 0}).to_list(500)
+        out = []
+        for d in docs:
+            out.append({
+                "id": d.get(id_field),
+                "label": d.get(label_field) or d.get(id_field),
+                "url": d.get(img_field),
+            })
+        return out
+
+    return {
+        "roster":       await _list("wrestlers",     "wrestler_id",  "photo",       "name"),
+        "podcasts":     await _list("episodes",      "episode_id",   "cover_image", "title"),
+        "shows":        await _list("events",        "event_id",     "poster",      "name"),
+        "marchandise":  await _list("products",      "product_id",   "image",       "name"),
+        "nouvelles":    await _list("news",          "news_id",      "image",       "title"),
+        "home":         await _list("home_sections", "section_id",   "image_url",   "title"),
+    }
+
+
+# ============================================================
+# Home Sections — CMS-lite for the Accueil screen
+# ============================================================
+HOME_KEYS = ["banniere", "prochain_show", "dernieres_nouvelles", "roster", "dernier_podcast", "marchandise", "promotions"]
+
+
+class HomeSectionBody(BaseModel):
+    section_key: str
+    title: Optional[str] = None
+    subtitle: Optional[str] = None
+    image_url: Optional[str] = None
+    link: Optional[str] = None
+    enabled: bool = True
+    order: int = 0
+
+
+@api_router.get("/home-sections")
+async def list_home_sections():
+    """Public — used by the Accueil screen. Returns enabled sections in order."""
+    items = await db.home_sections.find({"enabled": True}, {"_id": 0}).sort("order", 1).to_list(50)
+    return items
+
+
+@api_router.get("/admin/home-sections")
+async def admin_list_home_sections(authorization: Optional[str] = Header(None)):
+    """Admin — ALL sections (enabled + disabled)."""
+    await _require_admin(authorization)
+    items = await db.home_sections.find({}, {"_id": 0}).sort("order", 1).to_list(50)
+    return items
+
+
+@api_router.post("/admin/home-sections")
+async def admin_upsert_home_section(body: HomeSectionBody, authorization: Optional[str] = Header(None)):
+    await _require_admin(authorization)
+    if body.section_key not in HOME_KEYS:
+        raise HTTPException(400, f"section_key doit être dans: {HOME_KEYS}")
+    existing = await db.home_sections.find_one({"section_key": body.section_key}, {"_id": 0})
+    if existing:
+        await db.home_sections.update_one(
+            {"section_key": body.section_key},
+            {"$set": {**body.dict(), "updated_at": iso(now_utc())}},
+        )
+        section_id = existing["section_id"]
+    else:
+        section_id = make_id("hs")
+        await db.home_sections.insert_one({
+            "section_id": section_id,
+            **body.dict(),
+            "created_at": iso(now_utc()),
+            "updated_at": iso(now_utc()),
+        })
+    doc = await db.home_sections.find_one({"section_id": section_id}, {"_id": 0})
+    return doc
+
+
+@api_router.delete("/admin/home-sections/{section_id}")
+async def admin_delete_home_section(section_id: str, authorization: Optional[str] = Header(None)):
+    await _require_admin(authorization)
+    res = await db.home_sections.delete_one({"section_id": section_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Section introuvable")
+    return {"ok": True}
+
+
+@api_router.get("/admin/home-keys")
+async def admin_home_keys(authorization: Optional[str] = Header(None)):
+    await _require_admin(authorization)
+    return {"keys": HOME_KEYS}
+
+
+
 
 
 # ============================================================

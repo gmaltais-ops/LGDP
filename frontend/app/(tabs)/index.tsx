@@ -14,6 +14,7 @@ import { colors, spacing, radius, typography } from "@/src/theme";
 
 type Event = { event_id: string; name: string; date: string; location: string; poster?: string; price: number };
 type News = { news_id: string; title: string; description?: string; image?: string; category: string; date: string };
+type HomeSection = { section_id: string; section_key: string; title?: string | null; subtitle?: string | null; image_url?: string | null; link?: string | null; enabled: boolean; order: number };
 
 function fmtDate(iso?: string) {
   if (!iso) return "";
@@ -32,15 +33,17 @@ export default function Home() {
   const [events, setEvents] = useState<Event[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [news, setNews] = useState<News[]>([]);
+  const [homeSections, setHomeSections] = useState<HomeSection[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const [ev, ep, nw] = await Promise.all([
+      const [ev, ep, nw, hs] = await Promise.all([
         api.get<Event[]>("/events"),
         api.get<Episode[]>("/episodes"),
         api.get<News[]>("/news"),
+        api.get<HomeSection[]>("/home-sections").catch(() => [] as HomeSection[]),
       ]);
-      setEvents(ev); setEpisodes(ep); setNews(nw);
+      setEvents(ev); setEpisodes(ep); setNews(nw); setHomeSections(hs);
     } catch {}
     setLoading(false); setRefreshing(false);
   }, []);
@@ -49,6 +52,7 @@ export default function Home() {
 
   const heroEvent = events[0];
   const latestEp = episodes[0];
+  const bannerSection = homeSections.find(s => s.section_key === "banniere");
 
   if (loading) {
     return (
@@ -65,7 +69,7 @@ export default function Home() {
         {/* HERO */}
         <View style={styles.hero} testID="home-hero">
           <Image
-            source={{ uri: heroEvent?.poster || "https://images.unsplash.com/photo-1515175192010-cf3250992719?w=1200&q=80" }}
+            source={{ uri: bannerSection?.image_url || heroEvent?.poster || "https://images.unsplash.com/photo-1515175192010-cf3250992719?w=1200&q=80" }}
             style={StyleSheet.absoluteFillObject} contentFit="cover"
           />
           <LinearGradient colors={["rgba(13,14,18,0.2)", "rgba(13,14,18,0.9)", "rgba(13,14,18,1)"]} style={StyleSheet.absoluteFillObject} />
@@ -79,8 +83,8 @@ export default function Home() {
               </Pressable>
             </View>
             <View style={{ flex: 1, justifyContent: "flex-end" }}>
-              <Text style={styles.heroKicker}>LE PODCAST QUI FRAPPE PLUS FORT</Text>
-              <Text style={styles.heroTitle}>{heroEvent?.name || "LGDP LIVE"}</Text>
+              <Text style={styles.heroKicker}>{bannerSection?.subtitle || "LE PODCAST QUI FRAPPE PLUS FORT"}</Text>
+              <Text style={styles.heroTitle}>{bannerSection?.title || heroEvent?.name || "LGDP LIVE"}</Text>
               <Text style={styles.heroMeta}>{heroEvent ? `${fmtDate(heroEvent.date)} • ${heroEvent.location}` : ""}</Text>
               <View style={styles.heroActions}>
                 <Pressable

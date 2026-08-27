@@ -1246,6 +1246,28 @@ async def seed_data():
     for n in news_items:
         await db.news.update_one({"news_id": n["news_id"]}, {"$set": n}, upsert=True)
 
+    # --- Home Sections (defaults — all enabled, ordered)
+    default_home = [
+        {"section_key": "banniere",             "title": "LGDP LIVE",              "subtitle": "LE PODCAST QUI FRAPPE PLUS FORT", "order": 0, "enabled": True},
+        {"section_key": "dernieres_nouvelles",  "title": "Nouvelles",              "subtitle": None, "order": 1, "enabled": True},
+        {"section_key": "prochain_show",        "title": "Événements à venir",     "subtitle": None, "order": 2, "enabled": True},
+        {"section_key": "dernier_podcast",      "title": "Dernier podcast",        "subtitle": None, "order": 3, "enabled": True},
+        {"section_key": "roster",               "title": "Roster LGDP",            "subtitle": "Les durs de la fédération", "order": 4, "enabled": True},
+        {"section_key": "marchandise",          "title": "Boutique",               "subtitle": "Le stuff des vrais fans", "order": 5, "enabled": True},
+        {"section_key": "promotions",           "title": "Promotions",             "subtitle": None, "order": 6, "enabled": False},
+    ]
+    for h in default_home:
+        existing = await db.home_sections.find_one({"section_key": h["section_key"]}, {"_id": 0})
+        if not existing:
+            await db.home_sections.insert_one({
+                "section_id": make_id("hs"),
+                **h,
+                "image_url": None,
+                "link": None,
+                "created_at": iso(now_utc()),
+                "updated_at": iso(now_utc()),
+            })
+
     return {
         "ok": True,
         "seeded": {
@@ -1256,6 +1278,7 @@ async def seed_data():
             "events": len(events),
             "products": len(products),
             "news": len(news_items),
+            "home_sections": len(default_home),
         },
     }
 
@@ -1290,6 +1313,12 @@ async def on_startup():
         if wcount == 0:
             logger.info("Empty DB detected, auto-seeding demo data...")
             await seed_data()
+        else:
+            # Ensure home_sections defaults exist even if wrestlers were already seeded
+            hs_count = await db.home_sections.count_documents({})
+            if hs_count == 0:
+                logger.info("home_sections empty — seeding defaults...")
+                await seed_data()
     except Exception as e:
         logger.warning(f"Startup init failed: {e}")
 

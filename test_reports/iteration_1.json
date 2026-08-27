@@ -1,0 +1,37 @@
+{
+  "summary": "Full-stack validation of two features: (1) Live admin image upload to Supabase Storage (end-to-end, real PNG bytes, public URL reachable, resource attach persisted); (2) Dynamic rendering of Accueil sections from /api/home-sections (order + enabled + custom title/subtitle). Backend: 15/15 new tests pass. Frontend (mobile viewport 390x844): all critical flows pass, including dynamic hide/restore of the 'roster' section via CMS toggle. No deprecated Expo packages found. Minor RN warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' (framework-level, not user code).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/episodes/{id}, /api/events/{id}", "issue": "Pre-existing regression test bug in backend_test.py (uses 'id' field but API returns 'episode_id'/'event_id'). API itself works correctly. Not part of this iteration."},
+      {"endpoint": "/api/tickets/purchase, /api/orders, /api/favorites/toggle", "issue": "Pre-existing regression tests in backend_test.py use wrong payload shape (send flat product_id instead of nested items[].product_id being non-null). Endpoints work; test needs update. Not part of this iteration."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_and_home_sections.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: fix pre-existing regression tests in /app/backend/tests/backend_test.py to use correct id fields (episode_id/event_id/product_id) — not part of this iteration but worth cleaning up."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1329 lines — consider splitting into modules (admin_routes, storage_routes, home_sections_routes) for maintainability.",
+    "POST /api/admin/home-sections upserts by section_key but does not enforce unique 'order' values — two sections could share the same order (currently OK because sort is stable, but worth noting for CMS UX).",
+    "In admin_upload_image, when resource_type is provided but resource_id doesn't match, the file is already uploaded to Storage before the 404 is raised — leaves an orphan blob in Supabase. Consider validating resource existence BEFORE uploading."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_and_home_sections.py (new test file, 15 tests)"
+  ],
+  "success_rate": {"backend": "100% (15/15 new tests)", "frontend": "100% (all 15 checkpoints)"},
+  "seed_data_creation": "Test uploaded 2 tiny 1x1 PNG files to Supabase buckets 'accueil' and 'roster' (linked to wr_marek.photo). Also toggled 'promotions' section enable/disable during CMS CRUD test. Frontend UI test toggled 'roster' OFF then back ON; final state restored — public /home-sections returns the 6 default sections in order 0..5, promotions disabled.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Live upload to Supabase Storage is confirmed working via multipart POST to /api/admin/upload. Public URLs (https://wctcmpyjuwnvoandyqei.supabase.co/storage/v1/object/public/<bucket>/<path>) are reachable. Home sections CMS is fully functional; frontend renders dynamically and reacts to enabled/order changes. The 7 section_keys are: banniere, prochain_show, dernieres_nouvelles, roster, dernier_podcast, marchandise, promotions. Default seed disables 'promotions' only. Fan users correctly get 403 on all admin endpoints and see 'Accès administrateur requis' block on /admin. Note: expo-image-picker does open in web preview but tests bypassed via direct multipart HTTP upload as recommended.",
+  "rca_of_issue": "N/A — no bugs found for the tested features."
+}
